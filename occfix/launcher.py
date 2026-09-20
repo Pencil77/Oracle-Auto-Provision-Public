@@ -238,6 +238,19 @@ class Launcher:
                 "attempts": attempts,
             },
         )
+        import os
+        import requests
+        render_token = os.environ.get("RENDER_API_KEY")
+        service_id = os.environ.get("RENDER_SERVICE_ID")
+        if render_token and service_id:
+            try:
+                log.info("Suspending Render service...")
+                requests.post(
+                    f"https://api.render.com/v1/services/{service_id}/suspend",
+                    headers={"authorization": f"Bearer {render_token}", "accept": "application/json"}
+                )
+            except Exception as e:
+                log.warning(f"Failed to suspend Render service: {e}")
         return LaunchResult(
             spec_name=spec.name,
             instance_id=instance_id,
