@@ -229,8 +229,13 @@ class Launcher:
         log.info("Instance launched: %s (IP: %s)", instance_id, public_ip)
         self._notify(
             "launched",
-            "Instance launched!",
-            f"id={instance_id} ip={public_ip} ad={outcome.ad} attempts={attempts}",
+            "🎉 BOOM! WE GOT IT! 🎉",
+            f"After {attempts} attempts, the automation script finally secured your instance!\n\n"
+            f"📍 Name: {spec.display_name}\n"
+            f"🌍 IP Address: {public_ip}\n"
+            f"⚙️ AD: {outcome.ad}\n"
+            f"🔑 ID: {instance_id}\n\n"
+            f"The Render automation script is now shutting itself down automatically. Enjoy!", 
             data={
                 "instance_id": instance_id,
                 "public_ip": public_ip,
