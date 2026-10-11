@@ -58,6 +58,78 @@ HTML_CONTENT = """<!DOCTYPE html>
 </body>
 </html>"""
 
+import configparser
+import datetime
+import threading
+import time
+import requests
+
+def send_weekly_telegram_status():
+    token = os.environ.get("OCCFIX_TELEGRAM_BOT_TOKEN", "")
+    uid = os.environ.get("OCCFIX_TELEGRAM_UID", "")
+    
+    if os.path.exists("configuration.ini"):
+        try:
+            cp = configparser.ConfigParser()
+            cp.read("configuration.ini")
+            if cp.has_section("Telegram"):
+                token = cp.get("Telegram", "bot_token", fallback=token)
+                uid = cp.get("Telegram", "uid", fallback=uid)
+        except Exception:
+            pass
+
+    if not token or not uid or token == "xxxx" or uid == "xxxx":
+        print("Telegram credentials not configured for status update.")
+        return
+
+    last_log = "Polling active..."
+    if os.path.exists("oci_occ.log"):
+        try:
+            with open("oci_occ.log", "r", encoding="utf-8", errors="ignore") as f:
+                lines = [line.strip() for line in f if line.strip()]
+                if lines:
+                    last_log = lines[-1]
+        except Exception:
+            pass
+
+    msg = (
+        "📊 Weekly Oracle Bot Status Update\n\n"
+        "🟢 Status: Active & Hunting\n"
+        "📍 Target: silicon box\n"
+        "🏛️ Region: us-ashburn-1 (US East)\n"
+        "⚙️ ADs: AD-1, AD-2, AD-3 (Concurrent Sweep)\n"
+        "💻 Shape: VM.Standard.A1.Flex (2 OCPU / 12GB)\n\n"
+        f"📝 Latest Status: {last_log}\n\n"
+        "The bot is running smoothly in the background. You will receive an immediate alert when the server is secured!"
+    )
+
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data={"chat_id": uid, "text": msg},
+            timeout=10,
+        )
+    except Exception as e:
+        print("Failed to send status update:", e)
+
+def weekly_schedule_worker():
+    last_sent_day = -1
+    while True:
+        try:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            # IST is UTC + 5h30m. Friday 21:00 IST is Friday 15:30 UTC.
+            ist_time = now_utc + datetime.timedelta(hours=5, minutes=30)
+            # Friday is weekday 4 (0=Monday, 4=Friday)
+            if ist_time.weekday() == 4 and ist_time.hour == 21 and ist_time.minute == 0:
+                if last_sent_day != ist_time.day:
+                    send_weekly_telegram_status()
+                    last_sent_day = ist_time.day
+        except Exception:
+            pass
+        time.sleep(30)
+
+threading.Thread(target=weekly_schedule_worker, daemon=True).start()
+
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/logs':
@@ -71,6 +143,17 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b"Log file not found")
+        elif self.path == '/status-ping':
+            try:
+                send_weekly_telegram_status()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b"Weekly status ping sent to Telegram successfully")
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(str(e).encode('utf-8'))
         else:
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')

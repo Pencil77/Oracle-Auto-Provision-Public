@@ -190,12 +190,6 @@ class Launcher:
                 "occfix_rate_limit_permits_per_sec", self.ratelimiter.current_rate
             )
 
-            if attempts % self.milestone_every == 0:
-                self._notify(
-                    "attempt_milestone",
-                    f"Still hunting {spec.name}",
-                    f"attempts={attempts} last={worst.result.value} next={delay:.1f}s",
-                )
             log.info(
                 "%s: %d attempts, last=%s, next retry in %.1fs (rate=%.2f/s)",
                 spec.name,
