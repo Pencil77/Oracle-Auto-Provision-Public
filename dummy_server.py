@@ -43,6 +43,11 @@ HTML_CONTENT = """<!DOCTYPE html>
 <body>
   <h1>☁️ Oracle Auto-Provision Dashboard</h1>
   <div class="status"><span class="pulse"></span> LIVE: Polling for 'silicon box'</div>
+  <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+    <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #58a6ff;">🏛️ Region: us-ashburn-1 (US East)</span>
+    <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #7ee787;">⚙️ ADs: AD-1, AD-2, AD-3 (Concurrent Sweep)</span>
+    <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #d2a8ff;">💻 Shape: VM.Standard.A1.Flex (2 OCPU / 12GB)</span>
+  </div>
   <div class="terminal-container">
     <div class="terminal-header">
       <span>oci_occ.log</span>

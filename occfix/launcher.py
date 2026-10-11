@@ -231,16 +231,21 @@ class Launcher:
             "launched",
             "🎉 BOOM! WE GOT IT! 🎉",
             f"After {attempts} attempts, the automation script finally secured your instance!\n\n"
-            f"📍 Name: {spec.display_name}\n"
-            f"🌍 IP Address: {public_ip}\n"
-            f"⚙️ AD: {outcome.ad}\n"
-            f"🔑 ID: {instance_id}\n\n"
-            f"The Render automation script is now shutting itself down automatically. Enjoy!", 
+            f"📍 Instance Name: {spec.display_name}\n"
+            f"🏛️ Account Region: {spec.region}\n"
+            f"⚙️ Availability Domain: {outcome.ad}\n"
+            f"💻 Specs: {spec.shape} ({spec.ocpus} OCPUs, {spec.memory} GB RAM)\n"
+            f"📁 Tenancy/Compartment: {spec.compartment_id}\n"
+            f"🌍 Public IP: {public_ip}\n"
+            f"🔑 Instance OCID: {instance_id}\n\n"
+            f"The Render automation script is now shutting itself down automatically. Enjoy!",
             data={
                 "instance_id": instance_id,
                 "public_ip": public_ip,
                 "availability_domain": outcome.ad,
                 "attempts": attempts,
+                "region": spec.region,
+                "compartment_id": spec.compartment_id,
             },
         )
         import os
