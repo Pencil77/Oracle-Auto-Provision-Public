@@ -47,10 +47,11 @@ HTML_CONTENT = """<!DOCTYPE html>
     <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #58a6ff;">🏛️ Region: us-ashburn-1 (US East)</span>
     <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #7ee787;">⚙️ ADs: AD-1, AD-2, AD-3 (Concurrent Sweep)</span>
     <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #d2a8ff;">💻 Shape: VM.Standard.A1.Flex (2 OCPU / 12GB)</span>
+    <span style="background: #21262d; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; font-size: 0.85em; color: #f0883e;">⏰ Timezone: IST (UTC+5:30)</span>
   </div>
   <div class="terminal-container">
     <div class="terminal-header">
-      <span>oci_occ.log</span>
+      <span>oci_occ.log (IST)</span>
       <span>Auto-refreshing every 5s</span>
     </div>
     <div class="terminal" id="terminal">Loading live logs from container...</div>
@@ -60,9 +61,34 @@ HTML_CONTENT = """<!DOCTYPE html>
 
 import configparser
 import datetime
+import os
+import re
 import threading
 import time
 import requests
+
+IST_TZ = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+UTC_LOG_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:,\d{3})?)(?!\s*IST)(\s+.*)$")
+
+def convert_line_to_ist(line: str) -> str:
+    m = UTC_LOG_RE.match(line)
+    if not m:
+        return line
+    date_str, time_str, rest = m.groups()
+    try:
+        if "," in time_str:
+            main_time, msec = time_str.split(",")
+            dt = datetime.datetime.strptime(f"{date_str} {main_time}", "%Y-%m-%d %H:%M:%S")
+            msec_str = f",{msec}"
+        else:
+            dt = datetime.datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+            msec_str = ""
+        dt_utc = dt.replace(tzinfo=datetime.timezone.utc)
+        dt_ist = dt_utc.astimezone(IST_TZ)
+        dt_formatted = dt_ist.strftime("%Y-%m-%d %H:%M:%S")
+        return f"{dt_formatted}{msec_str} IST{rest}"
+    except Exception:
+        return line
 
 def send_weekly_telegram_status():
     token = os.environ.get("OCCFIX_TELEGRAM_BOT_TOKEN", "")
@@ -88,7 +114,7 @@ def send_weekly_telegram_status():
             with open("oci_occ.log", "r", encoding="utf-8", errors="ignore") as f:
                 lines = [line.strip() for line in f if line.strip()]
                 if lines:
-                    last_log = lines[-1]
+                    last_log = convert_line_to_ist(lines[-1])
         except Exception:
             pass
 
@@ -137,8 +163,12 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/plain; charset=utf-8')
                 self.end_headers()
-                with open('oci_occ.log', 'rb') as f:
-                    self.wfile.write(f.read())
+                try:
+                    with open('oci_occ.log', 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = [convert_line_to_ist(line.rstrip('\r\n')) for line in f]
+                    self.wfile.write('\n'.join(lines).encode('utf-8'))
+                except Exception as e:
+                    self.wfile.write(f"Error reading logs: {e}".encode('utf-8'))
             else:
                 self.send_response(404)
                 self.end_headers()

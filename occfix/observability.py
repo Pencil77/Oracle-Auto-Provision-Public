@@ -13,7 +13,9 @@ import logging
 import logging.handlers
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 from occfix.config import ObservabilityConfig
 
@@ -28,7 +30,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
             "level": record.levelname,
-            "time": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "time": datetime.fromtimestamp(record.created, tz=IST).isoformat(),
             "message": record.getMessage(),
         }
         for key, value in record.__dict__.items():
@@ -81,6 +83,17 @@ class SecretRedactionFilter(logging.Filter):
         return True
 
 
+class ISTFormatter(logging.Formatter):
+    """Format timestamps in Indian Standard Time (IST / UTC+5:30)."""
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        dt = datetime.fromtimestamp(record.created, tz=IST)
+        if datefmt:
+            return dt.strftime(datefmt)
+        base = dt.strftime("%Y-%m-%d %H:%M:%S")
+        return f"{base},{int(record.msecs):03d} IST"
+
+
 def setup_logging(config: ObservabilityConfig) -> None:
     """Configure the root logger idempotently from ``config``."""
 
@@ -94,7 +107,7 @@ def setup_logging(config: ObservabilityConfig) -> None:
     if config.log_format == "json":
         formatter: logging.Formatter = JsonFormatter()
     else:
-        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        formatter = ISTFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     redaction = SecretRedactionFilter()
 
