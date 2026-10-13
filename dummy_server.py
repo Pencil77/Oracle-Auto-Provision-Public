@@ -73,7 +73,7 @@ UTC_LOG_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:,\d{3})?)(?!
 def convert_line_to_ist(line: str) -> str:
     m = UTC_LOG_RE.match(line)
     if not m:
-        return line
+        return line.replace("legacy:", "silicon box:")
     date_str, time_str, rest = m.groups()
     try:
         if "," in time_str:
@@ -86,9 +86,10 @@ def convert_line_to_ist(line: str) -> str:
         dt_utc = dt.replace(tzinfo=datetime.timezone.utc)
         dt_ist = dt_utc.astimezone(IST_TZ)
         dt_formatted = dt_ist.strftime("%Y-%m-%d %H:%M:%S")
-        return f"{dt_formatted}{msec_str} IST{rest}"
+        res = f"{dt_formatted}{msec_str} IST{rest}"
+        return res.replace("legacy:", "silicon box:")
     except Exception:
-        return line
+        return line.replace("legacy:", "silicon box:")
 
 def send_weekly_telegram_status():
     token = os.environ.get("OCCFIX_TELEGRAM_BOT_TOKEN", "")

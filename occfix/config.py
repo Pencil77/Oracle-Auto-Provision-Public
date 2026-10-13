@@ -160,8 +160,10 @@ def _legacy_target(cp: configparser.ConfigParser, oci_region: str) -> LaunchSpec
         except ValueError:
             return default
 
+    display_name = _get(cp, "Instance", "display_name") or "silicon box"
+
     return LaunchSpec(
-        name="legacy",
+        name=display_name,
         region=oci_region,
         availability_domains=ads,
         shape=_get(cp, "Machine", "shape"),
