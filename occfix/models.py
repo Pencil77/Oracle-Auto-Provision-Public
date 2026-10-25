@@ -181,9 +181,13 @@ class LaunchSpec:
     boot_volume_size: int = 47
     machine_type: str = "ARM"
     count: int = 1
+    user_data: str | None = None
 
     def uses_boot_volume(self) -> bool:
         return bool(self.boot_volume_id) and self.boot_volume_id != "xxxx"
+
+    def is_flex(self) -> bool:
+        return "Flex" in self.shape
 
 
 @dataclass

@@ -143,6 +143,9 @@ class Launcher:
 
         reason = self.validate(spec)
         if reason:
+            if "already exists" in reason:
+                log.info("Target %s already active in tenancy (%s). Proceeding to next target.", spec.name, reason)
+                return None
             log.critical("Validation failed for %s: %s", spec.name, reason)
             self._notify("error", "Validation failed", reason)
             return None
@@ -242,19 +245,6 @@ class Launcher:
                 "compartment_id": spec.compartment_id,
             },
         )
-        import os
-        import requests
-        render_token = os.environ.get("RENDER_API_KEY")
-        service_id = os.environ.get("RENDER_SERVICE_ID")
-        if render_token and service_id:
-            try:
-                log.info("Suspending Render service...")
-                requests.post(
-                    f"https://api.render.com/v1/services/{service_id}/suspend",
-                    headers={"authorization": f"Bearer {render_token}", "accept": "application/json"}
-                )
-            except Exception as e:
-                log.warning(f"Failed to suspend Render service: {e}")
         return LaunchResult(
             spec_name=spec.name,
             instance_id=instance_id,
@@ -298,6 +288,10 @@ class Launcher:
                     return f"ARM OCPU quota exceeded (max {limits.arm_max_ocpus})"
                 if used_mem + spec.memory > limits.arm_max_memory_gb:
                     return f"ARM memory quota exceeded (max {limits.arm_max_memory_gb}GB)"
+            elif spec.machine_type.upper() in ("AMD", "X86") or spec.shape == "VM.Standard.E2.1.Micro":
+                e2 = [i for i in instances if i.shape == "VM.Standard.E2.1.Micro"]
+                if len(e2) >= limits.amd_max_instances:
+                    return f"AMD E2.1.Micro quota exceeded (maximum {limits.amd_max_instances} instances allowed in Always Free tier)"
             return None
         except AuthError:
             raise
@@ -367,7 +361,9 @@ class Engine:
 
         results: list[LaunchResult] = []
         launcher = self._make_launcher()
-        for spec in self.config.targets:
+        total_targets = len(self.config.targets)
+        for idx, spec in enumerate(self.config.targets, 1):
+            log.info("Starting target %d/%d: %s (%s)", idx, total_targets, spec.name, spec.shape)
             result = launcher.run_target(
                 spec,
                 stop_event=stop_event,
@@ -378,4 +374,36 @@ class Engine:
                 results.append(result)
         if self.dispatcher is not None:
             self.dispatcher.flush()
+
+        # If all configured targets have completed (either launched now or already existing), auto-suspend Render
+        all_done = False
+        try:
+            active_instances = [
+                i.display_name
+                for i in self.gateway.list_instances(self.config.targets[0].compartment_id)
+                if i.is_active
+            ]
+            target_names = [spec.display_name for spec in self.config.targets]
+            if all(name in active_instances for name in target_names):
+                all_done = True
+        except Exception:
+            if results and len(results) == total_targets:
+                all_done = True
+
+        if all_done:
+            import os
+            import requests
+
+            render_token = os.environ.get("RENDER_API_KEY")
+            service_id = os.environ.get("RENDER_SERVICE_ID")
+            if render_token and service_id:
+                try:
+                    log.info("All configured targets active in tenancy! Suspending Render service...")
+                    requests.post(
+                        f"https://api.render.com/v1/services/{service_id}/suspend",
+                        headers={"authorization": f"Bearer {render_token}", "accept": "application/json"},
+                    )
+                except Exception as e:
+                    log.warning(f"Failed to suspend Render service: {e}")
+
         return results

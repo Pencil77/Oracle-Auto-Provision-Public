@@ -79,10 +79,45 @@ class RealOciGateway(OciGateway):
 
     # -- launch ----------------------------------------------------------
     def launch_instance(self, spec: LaunchSpec, availability_domain: str, retry_token: str) -> str:
+        import base64
         import oci  # noqa: PLC0415 - lazy import keeps the SDK off the hot path
 
+        metadata: dict[str, str] = {"ssh_authorized_keys": spec.ssh_keys}
+        if spec.user_data:
+            ud_bytes = spec.user_data.encode("utf-8") if isinstance(spec.user_data, str) else spec.user_data
+            try:
+                base64.b64decode(ud_bytes, validate=True)
+                metadata["user_data"] = spec.user_data if isinstance(spec.user_data, str) else ud_bytes.decode("ascii")
+            except Exception:
+                metadata["user_data"] = base64.b64encode(ud_bytes).decode("ascii")
+        elif spec.shape == "VM.Standard.E2.1.Micro" or spec.machine_type.upper() in ("AMD", "X86"):
+            # Automated 8 GB swap allocation + kernel tuning + anti-idle heartbeat cron
+            cloud_init_script = (
+                "#!/bin/bash\n"
+                "fallocate -l 8G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=8192\n"
+                "chmod 600 /swapfile\n"
+                "mkswap /swapfile\n"
+                "swapon /swapfile\n"
+                "echo '/swapfile none swap sw 0 0' >> /etc/fstab\n"
+                "sysctl vm.swappiness=60\n"
+                "sysctl vm.vfs_cache_pressure=50\n"
+                "echo 'vm.swappiness=60' >> /etc/sysctl.conf\n"
+                "echo 'vm.vfs_cache_pressure=50' >> /etc/sysctl.conf\n"
+                "(crontab -l 2>/dev/null; echo '*/15 * * * * dd if=/dev/urandom of=/dev/null bs=1M count=20 status=none; ping -c 3 1.1.1.1 >/dev/null 2>&1') | crontab -\n"
+            )
+            metadata["user_data"] = base64.b64encode(cloud_init_script.encode("utf-8")).decode("ascii")
+
+        shape_config = (
+            oci.core.models.LaunchInstanceShapeConfigDetails(
+                ocpus=spec.ocpus,
+                memory_in_gbs=spec.memory,
+            )
+            if spec.is_flex()
+            else None
+        )
+
         details = oci.core.models.LaunchInstanceDetails(
-            metadata={"ssh_authorized_keys": spec.ssh_keys},
+            metadata=metadata,
             availability_domain=availability_domain.strip(),
             compartment_id=spec.compartment_id,
             shape=spec.shape,
@@ -92,10 +127,7 @@ class RealOciGateway(OciGateway):
                 subnet_id=spec.subnet_id,
                 assign_public_ip=True,
             ),
-            shape_config=oci.core.models.LaunchInstanceShapeConfigDetails(
-                ocpus=spec.ocpus,
-                memory_in_gbs=spec.memory,
-            ),
+            shape_config=shape_config,
         )
 
         try:

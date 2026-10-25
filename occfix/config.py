@@ -40,6 +40,7 @@ class LimitsConfig:
     max_total_storage_gb: int = 200
     arm_max_ocpus: int = 4
     arm_max_memory_gb: int = 24
+    amd_max_instances: int = 2
     validation_ttl: float = 300.0
 
 
@@ -181,6 +182,76 @@ def _legacy_target(cp: configparser.ConfigParser, oci_region: str) -> LaunchSpec
     )
 
 
+def _parse_targets(cp: configparser.ConfigParser, oci_region: str) -> list[LaunchSpec]:
+    """Parse one or more launch targets from configuration.ini, with fallback to legacy."""
+    target_sections = [
+        s for s in cp.sections() if s.lower().startswith("target:") or s.lower().startswith("target_")
+    ]
+    if not target_sections:
+        legacy = _legacy_target(cp, oci_region)
+        return [legacy] if legacy is not None else []
+
+    # Defaults from base sections
+    default_ads = _parse_ad_list(_get(cp, "OCI", "availability_domains")) if cp.has_section("OCI") else []
+    default_compartment = _get(cp, "OCI", "compartment_id") if cp.has_section("OCI") else ""
+    default_subnet = _get(cp, "OCI", "subnet_id") if cp.has_section("OCI") else ""
+    default_ssh_keys = _get(cp, "Instance", "ssh_keys") if cp.has_section("Instance") else ""
+    default_shape = _get(cp, "Machine", "shape") if cp.has_section("Machine") else "VM.Standard.A1.Flex"
+    default_type = (_get(cp, "Machine", "type") if cp.has_section("Machine") else "ARM") or "ARM"
+    default_image = _get(cp, "OCI", "image_id") if cp.has_section("OCI") else None
+    default_bv_id = _get(cp, "OCI", "boot_volume_id", "xxxx") if cp.has_section("OCI") else "xxxx"
+
+    def _int_sec(s: str, k: str, default: int) -> int:
+        raw = _get(cp, s, k)
+        try:
+            return int(raw) if raw != "" else default
+        except ValueError:
+            return default
+
+    specs: list[LaunchSpec] = []
+    for s in target_sections:
+        sep = ":" if ":" in s else "_"
+        name = s.split(sep, 1)[1].strip()
+        shape = _get(cp, s, "shape", default_shape)
+        m_type = (_get(cp, s, "machine_type", _get(cp, s, "type", default_type)) or "ARM").upper()
+        is_flex = "Flex" in shape
+        default_ocpus = 2 if is_flex else 1
+        default_mem = 12 if is_flex else 1
+        ocpus = _int_sec(s, "ocpus", default_ocpus)
+        memory = _int_sec(s, "memory", default_mem)
+        raw_ads = _get(cp, s, "availability_domains")
+        ads = _parse_ad_list(raw_ads) if raw_ads else default_ads
+        comp = _get(cp, s, "compartment_id", default_compartment)
+        subnet = _get(cp, s, "subnet_id", default_subnet)
+        display_name = _get(cp, s, "display_name", name)
+        ssh = _get(cp, s, "ssh_keys", default_ssh_keys)
+        image = _get(cp, s, "image_id", default_image) or None
+        bv_id = _get(cp, s, "boot_volume_id", default_bv_id) or "xxxx"
+        bv_size = _int_sec(s, "boot_volume_size", 50)
+        user_data = _get(cp, s, "user_data") or None
+
+        spec = LaunchSpec(
+            name=name,
+            region=oci_region,
+            availability_domains=ads,
+            shape=shape,
+            ocpus=ocpus,
+            memory=memory,
+            compartment_id=comp,
+            subnet_id=subnet,
+            display_name=display_name,
+            ssh_keys=ssh,
+            image_id=image,
+            boot_volume_id=bv_id,
+            boot_volume_size=bv_size,
+            machine_type=m_type,
+            count=1,
+            user_data=user_data,
+        )
+        specs.append(spec)
+    return specs
+
+
 def _read_oci_region(oci_config_path: Path, profile: str) -> str:
     if not oci_config_path.exists():
         return ""
@@ -308,11 +379,9 @@ def load_config(
         cfg.auth.method = _get(cp, "Auth", "method", cfg.auth.method)
         cfg.auth.oci_profile = _get(cp, "Auth", "profile", cfg.auth.oci_profile)
 
-    # Targets: legacy single target for now (multi-target parsing is additive later).
+    # Targets: supports multiple [Target:name] sections with fallback to legacy.
     region = _read_oci_region(oci_config_path, cfg.auth.oci_profile)
-    legacy = _legacy_target(cp, region)
-    if legacy is not None:
-        cfg.targets.append(legacy)
+    cfg.targets = _parse_targets(cp, region)
 
     _apply_env(cfg, env)
     _apply_overrides(cfg, overrides or {})

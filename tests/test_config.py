@@ -110,3 +110,43 @@ def test_missing_targets_validate_raises():
     assert cfg.targets == []
     with pytest.raises(ConfigError):
         cfg.validate()
+
+
+def test_multi_targets_parsing(tmp_path):
+    multi_ini = LEGACY_INI + """
+[Target:silicon-box-e2-1]
+shape = VM.Standard.E2.1.Micro
+machine_type = AMD
+image_id = ocid1.image.oc1..x86
+boot_volume_size = 50
+
+[Target:silicon-box-arm]
+shape = VM.Standard.A1.Flex
+machine_type = ARM
+ocpus = 2
+memory = 12
+image_id = ocid1.image.oc1..arm
+boot_volume_size = 50
+"""
+    ini = tmp_path / "configuration.ini"
+    oci = tmp_path / "config"
+    ini.write_text(multi_ini)
+    oci.write_text(OCI_CFG)
+
+    cfg = load_config(ini, oci, env={})
+    assert len(cfg.targets) == 2
+    t1 = cfg.targets[0]
+    assert t1.name == "silicon-box-e2-1"
+    assert t1.shape == "VM.Standard.E2.1.Micro"
+    assert not t1.is_flex()
+    assert t1.ocpus == 1 and t1.memory == 1
+    assert t1.image_id == "ocid1.image.oc1..x86"
+
+    t2 = cfg.targets[1]
+    assert t2.name == "silicon-box-arm"
+    assert t2.shape == "VM.Standard.A1.Flex"
+    assert t2.is_flex()
+    assert t2.ocpus == 2 and t2.memory == 12
+    assert t2.image_id == "ocid1.image.oc1..arm"
+    cfg.validate()
+
