@@ -119,13 +119,49 @@ def send_weekly_telegram_status():
         except Exception:
             pass
 
+    region = "us-ashburn-1"
+    if os.path.exists("config"):
+        try:
+            cfg = configparser.ConfigParser()
+            cfg.read("config")
+            if cfg.has_section("DEFAULT"):
+                region = cfg.get("DEFAULT", "region", fallback=region)
+        except Exception:
+            pass
+
+    display_name = "silicon box"
+    ads_str = "All Configured ADs"
+    shape_str = "VM.Standard.A1.Flex (2 OCPU / 12GB)"
+    if os.path.exists("configuration.ini"):
+        try:
+            cp = configparser.ConfigParser()
+            cp.read("configuration.ini")
+            if cp.has_section("Instance"):
+                display_name = cp.get("Instance", "display_name", fallback=display_name)
+            if cp.has_section("OCI"):
+                raw_ads = cp.get("OCI", "availability_domains", fallback="")
+                if raw_ads:
+                    import json
+                    try:
+                        parsed_ads = json.loads(raw_ads)
+                        ads_str = ", ".join([ad.split(":")[-1] for ad in parsed_ads])
+                    except Exception:
+                        ads_str = raw_ads
+            if cp.has_section("Machine"):
+                m_shape = cp.get("Machine", "shape", fallback="VM.Standard.A1.Flex")
+                m_ocpus = cp.get("Machine", "ocpus", fallback="2")
+                m_mem = cp.get("Machine", "memory", fallback="12")
+                shape_str = f"{m_shape} ({m_ocpus} OCPU / {m_mem}GB)"
+        except Exception:
+            pass
+
     msg = (
         "📊 Weekly Oracle Bot Status Update\n\n"
         "🟢 Status: Active & Hunting\n"
-        "📍 Target: silicon box\n"
-        "🏛️ Region: us-ashburn-1 (US East)\n"
-        "⚙️ ADs: AD-1, AD-2, AD-3 (Concurrent Sweep)\n"
-        "💻 Shape: VM.Standard.A1.Flex (2 OCPU / 12GB)\n\n"
+        f"📍 Target: {display_name}\n"
+        f"🏛️ Region: {region}\n"
+        f"⚙️ ADs: {ads_str}\n"
+        f"💻 Shape: {shape_str}\n\n"
         f"📝 Latest Status: {last_log}\n\n"
         "The bot is running smoothly in the background. You will receive an immediate alert when the server is secured!"
     )
