@@ -401,7 +401,9 @@ _ENV_MAP: dict[str, tuple[str, str, type]] = {
     "OCCFIX_STATE_BACKEND": ("state", "backend", str),
     "OCCFIX_STATE_PATH": ("state", "path", str),
     "OCCFIX_TELEGRAM_BOT_TOKEN": ("notify", "telegram_bot_token", str),
+    "TELEGRAM_BOT_TOKEN": ("notify", "telegram_bot_token", str),
     "OCCFIX_TELEGRAM_UID": ("notify", "telegram_uid", str),
+    "TELEGRAM_UID": ("notify", "telegram_uid", str),
     "OCCFIX_CONTROL_HTTP_ENABLED": ("control", "http_enabled", bool),
     "OCCFIX_CONTROL_HTTP_PORT": ("control", "http_port", int),
 }
